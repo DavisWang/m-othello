@@ -3,6 +3,13 @@ import { FormEvent, useCallback, useMemo, useState } from "react";
 import { api } from "../convex/_generated/api";
 import { Board, diskCounts } from "./Board";
 import { clearSeat, loadSeat, saveSeat } from "./session";
+import { withTimeout } from "./withTimeout";
+
+const CONVEX_CALL_MS = 25_000;
+const TIMEOUT_MSG =
+  "Could not reach Convex (timed out). Confirm GitHub Actions secret VITE_CONVEX_URL is your " +
+  ".convex.cloud URL (not .convex.site), check DevTools → Network for blocked WebSocket, and try " +
+  "disabling ad blockers for this page.";
 
 function readGameIdFromUrl(): string | null {
   const id = new URLSearchParams(window.location.search).get("g");
@@ -59,7 +66,11 @@ export default function App() {
     setBusy(true);
     setMoveError(null);
     try {
-      const { publicId: id, blackToken } = await createGame({});
+      const { publicId: id, blackToken } = await withTimeout(
+        createGame({}),
+        CONVEX_CALL_MS,
+        TIMEOUT_MSG
+      );
       saveSeat(id, { role: "black", token: blackToken });
       writeGameIdToUrl(id);
       setUrlGameId(id);
@@ -75,7 +86,11 @@ export default function App() {
       setBusy(true);
       setMoveError(null);
       try {
-        const { whiteToken } = await joinGame({ publicId: id });
+        const { whiteToken } = await withTimeout(
+          joinGame({ publicId: id }),
+          CONVEX_CALL_MS,
+          TIMEOUT_MSG
+        );
         saveSeat(id, { role: "white", token: whiteToken });
         writeGameIdToUrl(id);
         setUrlGameId(id);
@@ -117,12 +132,16 @@ export default function App() {
       setMoveError(null);
       setBusy(true);
       try {
-        await makeMove({
-          publicId,
-          token: seat.token,
-          row,
-          col,
-        });
+        await withTimeout(
+          makeMove({
+            publicId,
+            token: seat.token,
+            row,
+            col,
+          }),
+          CONVEX_CALL_MS,
+          TIMEOUT_MSG
+        );
       } catch (e) {
         setMoveError(e instanceof Error ? e.message : "Move failed");
       } finally {
