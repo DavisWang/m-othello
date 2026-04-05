@@ -1,0 +1,63 @@
+# Build static site + deploy Convex production backend, then publish to GitHub Pages.
+#
+# Required GitHub repo secrets:
+#   CONVEX_DEPLOY_KEY  — Production deploy key from Convex dashboard (Settings → Deploy key)
+#   VITE_CONVEX_URL    — Production Convex URL, e.g. https://happy-animal-123.convex.cloud
+#
+# GitHub repo Settings → Pages: Source = GitHub Actions.
+#
+# For a project site (username.github.io/REPO_NAME/), the workflow sets VITE_BASE_PATH
+# to /REPO_NAME/ so assets resolve correctly.
+
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - run: npm ci
+
+      - name: Deploy Convex (production)
+        env:
+          CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
+        run: npx convex deploy
+
+      - name: Build Vite app
+        env:
+          VITE_CONVEX_URL: ${{ secrets.VITE_CONVEX_URL }}
+          VITE_BASE_PATH: /${{ github.event.repository.name }}/
+        run: npm run build
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
